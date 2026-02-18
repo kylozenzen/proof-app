@@ -191,15 +191,27 @@ html,body,#root{height:100%;font-family:'DM Sans',sans-serif;background:var(--cr
 
 /* NEW BOARD MODAL */
 .nb-modal{background:var(--cream);border-radius:16px;width:100%;max-width:480px;animation:slideUp .25s ease;box-shadow:0 30px 60px rgba(0,0,0,.25)}
+
+.topbar-right .form-input,.topbar-right .form-select{height:34px;padding:6px 10px;font-size:12.5px;min-width:140px;background:#fff}
+.topbar-note{font-size:11px;color:var(--charcoal-soft);margin-top:3px}
+.version-preview{margin-top:12px;padding:12px;border:1px solid var(--cream-border);border-radius:10px;background:var(--cream-dark)}
+.version-preview p{font-size:13px;line-height:1.6;color:var(--charcoal-mid)}
+.version-preview .cv-tag{font-size:11px}
+.toast-wrap{position:fixed;left:18px;bottom:18px;z-index:200;}
+.toast{background:#1C1A18;color:#fff;padding:10px 12px;border-radius:10px;font-size:13px;box-shadow:0 10px 24px rgba(0,0,0,0.22);animation:slideIn 0.18s ease;}
+@keyframes slideIn{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
+.toast.err{background:#C0392B;}
+
 </style>
 </head>
 <body>
 <div id="root"></div>
 
 <script type="text/babel">
-const { useState } = React;
+const { useState, useEffect, useMemo, useRef } = React;
 
 const PLATFORMS = { instagram:'📸', twitter:'🐦', linkedin:'💼', tiktok:'🎵', facebook:'👥' };
+const STORAGE_KEY = 'proof-demo-posts-v1';
 
 const INITIAL_BOARDS = [
   { id:'self',  name:'My Personal Brand', color:'#E8A020', initials:'ME' },
@@ -208,536 +220,285 @@ const INITIAL_BOARDS = [
   { id:'nova',  name:'Nova Fitness',      color:'#E84393', initials:'NF' },
 ];
 
-// Reliable Unsplash source images
 const SAMPLE_POSTS = [
-  {
-    id:1, boardId:'raven', title:'Spring Product Launch', platform:'instagram',
-    image:'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=700&auto=format&fit=crop&q=80',
-    content:"The wait is finally over 🌸 Our Spring 2025 collection drops tomorrow — six new pieces designed for the woman who makes her own rules. Early access link in bio.",
-    hashtags:['#SpringCollection','#RavenCollective','#NewDrop','#WomenInFashion'],
-    status:'needs-edits', dueDate:'Feb 19',
-    thread:[
-      {id:1,from:'you',text:'Copy is ready for review — let me know what you think!',time:'Feb 16, 2:30pm'},
-      {id:2,from:'client',clientName:'Sarah M.',text:"Love the energy! Can you swap 'six new pieces' for 'twelve new styles'? Also, could we lead with the discount code instead of the reveal?",time:'Feb 17, 9:12am'},
-    ]
-  },
-  {
-    id:2, boardId:'verde', title:'Weekend Brunch Promo', platform:'instagram',
-    image:'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=700&auto=format&fit=crop&q=80',
-    content:"Sundays were made for this. 🍳 Join us this weekend for our brand-new bottomless brunch. Fresh-pressed juices, our chef's signature eggs Benedict, and the best people-watching patio in town. Reserve your table — link in bio.",
-    hashtags:['#BrunchSZN','#VerdeKitchen','#WeekendVibes','#SATXEats'],
-    status:'pending', dueDate:'Feb 20',
-    thread:[{id:1,from:'you',text:"Here's the draft for the brunch promo. Sent the review link to Marco!",time:'Feb 17, 10:00am'}]
-  },
-  {
-    id:3, boardId:'nova', title:'New Class Schedule Drop', platform:'instagram',
-    image:'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=700&auto=format&fit=crop&q=80',
-    content:"Your February just got stronger 💥 New classes added: 6AM Power HIIT (M/W/F), Saturday Yoga Flow, and our brand-new Recovery Lab on Sundays. Spots go fast. Book now in the Nova app.",
-    hashtags:['#NovaTribe','#NewClassAlert','#FitnessMotivation'],
-    status:'approved', dueDate:'Feb 18',
-    thread:[
-      {id:1,from:'you',text:'Draft ready for your review!',time:'Feb 15, 3:00pm'},
-      {id:2,from:'client',clientName:'Jordan K.',text:'This is perfect. Approved!',time:'Feb 16, 11:00am'},
-    ]
-  },
-  {
-    id:4, boardId:'self', title:'Freelance Portfolio Post', platform:'linkedin',
-    image:null,
-    content:"Three years ago I had 0 followers and no strategy. Last month, the accounts I manage crossed 6 million total followers. Here's the framework I wish I had at the start 🧵",
-    hashtags:['#ContentStrategy','#SocialMedia','#CreatorEconomy','#Freelance'],
-    status:'draft', dueDate:'Feb 22',
-    thread:[]
-  },
-  {
-    id:5, boardId:'raven', title:'Community Spotlight Reel', platform:'instagram',
-    image:'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=700&auto=format&fit=crop&q=80',
-    content:"She's been wearing Raven for two years and still gets asked about every. single. outfit. Meet Emma — our community highlight this week ✨ Swipe to see her top picks from the archive.",
-    hashtags:['#RavenFamily','#CommunitySpotlight','#OOTD'],
-    status:'in-review', dueDate:'Feb 21',
-    thread:[{id:1,from:'you',text:'Sent the review link to Sarah! Waiting on her response.',time:'Feb 17, 1:00pm'}]
-  },
+  { id:1, boardId:'raven', title:'Spring Product Launch', platform:'instagram', image:'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=700&auto=format&fit=crop&q=80', content:"The wait is finally over 🌸 Our Spring 2025 collection drops tomorrow — six new pieces designed for the woman who makes her own rules. Early access link in bio.", hashtags:['#SpringCollection','#RavenCollective','#NewDrop','#WomenInFashion'], status:'needs-edits', dueDate:'Feb 19', thread:[{id:1,from:'you',text:'Copy is ready for review — let me know what you think!',time:'Feb 16, 2:30pm'},{id:2,from:'client',clientName:'Sarah M.',text:"Love the energy! Can you swap 'six new pieces' for 'twelve new styles'? Also, could we lead with the discount code instead of the reveal?",time:'Feb 17, 9:12am'}] },
+  { id:2, boardId:'verde', title:'Weekend Brunch Promo', platform:'instagram', image:'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=700&auto=format&fit=crop&q=80', content:"Sundays were made for this. 🍳 Join us this weekend for our brand-new bottomless brunch. Fresh-pressed juices, our chef's signature eggs Benedict, and the best people-watching patio in town. Reserve your table — link in bio.", hashtags:['#BrunchSZN','#VerdeKitchen','#WeekendVibes','#SATXEats'], status:'pending', dueDate:'Feb 20', thread:[{id:1,from:'you',text:"Here's the draft for the brunch promo. Sent the review link to Marco!",time:'Feb 17, 10:00am'}] },
+  { id:3, boardId:'nova', title:'New Class Schedule Drop', platform:'instagram', image:'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=700&auto=format&fit=crop&q=80', content:"Your February just got stronger 💥 New classes added: 6AM Power HIIT (M/W/F), Saturday Yoga Flow, and our brand-new Recovery Lab on Sundays. Spots go fast. Book now in the Nova app.", hashtags:['#NovaTribe','#NewClassAlert','#FitnessMotivation'], status:'approved', dueDate:'Feb 18', thread:[{id:1,from:'you',text:'Draft ready for your review!',time:'Feb 15, 3:00pm'},{id:2,from:'client',clientName:'Jordan K.',text:'This is perfect. Approved!',time:'Feb 16, 11:00am'}] },
+  { id:4, boardId:'self', title:'Freelance Portfolio Post', platform:'linkedin', image:null, content:"Three years ago I had 0 followers and no strategy. Last month, the accounts I manage crossed 6 million total followers. Here's the framework I wish I had at the start 🧵", hashtags:['#ContentStrategy','#SocialMedia','#CreatorEconomy','#Freelance'], status:'draft', dueDate:'Feb 22', thread:[] },
+  { id:5, boardId:'raven', title:'Community Spotlight Reel', platform:'instagram', image:'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=700&auto=format&fit=crop&q=80', content:"She's been wearing Raven for two years and still gets asked about every. single. outfit. Meet Emma — our community highlight this week ✨ Swipe to see her top picks from the archive.", hashtags:['#RavenFamily','#CommunitySpotlight','#OOTD'], status:'in-review', dueDate:'Feb 21', thread:[{id:1,from:'you',text:'Sent the review link to Sarah! Waiting on her response.',time:'Feb 17, 1:00pm'}] },
 ];
 
 const STATUS_LABELS = { pending:'Awaiting Review','needs-edits':'Needs Edits',approved:'Approved ✓',draft:'Draft','in-review':'In Review' };
 const STATUS_ORDER  = { 'needs-edits':0,pending:1,'in-review':2,draft:3,approved:4 };
 
-// ── Shared helpers ──────────────────────────────────────────────────────────
-function StatusPill({status}) {
-  return <span className={`status-pill ${status}`}>{STATUS_LABELS[status]||status}</span>;
+const humanTime = (date = new Date()) => new Date(date).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+const statusNice = status => ({'needs-edits':'Needs Edits',pending:'Pending','in-review':'In Review',draft:'Draft',approved:'Approved'})[status] || status;
+const reviewLinkFor = post => `proof.app/review/${post.id}-${post.title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}`;
+
+function normalizePosts(inputPosts) {
+  return (inputPosts || []).map(post => {
+    const baseVersion = {
+      v: 1,
+      content: post.content || '',
+      hashtags: Array.isArray(post.hashtags) ? post.hashtags : [],
+      time: post.lastUpdated || humanTime(),
+      status: post.status || 'draft',
+    };
+    return {
+      ...post,
+      thread: Array.isArray(post.thread) ? post.thread : [],
+      lastUpdated: post.lastUpdated || humanTime(),
+      versions: Array.isArray(post.versions) && post.versions.length ? post.versions : [baseVersion],
+    };
+  });
 }
 
-function BoardAvatar({board}) {
-  return <div className="board-avatar" style={{background:board.color+'26',color:board.color}}>{board.initials}</div>;
-}
+function StatusPill({status}) { return <span className={`status-pill ${status}`}>{STATUS_LABELS[status]||status}</span>; }
+function BoardAvatar({board}) { return <div className="board-avatar" style={{background:board.color+'26',color:board.color}}>{board.initials}</div>; }
+function ProofLogo({size=24,dark=false}) { return <div className="proof-logo"><span className={`proof-logo-text${dark?' dark':''}`} style={{fontSize:size}}><i>Proof</i></span><span className="proof-logo-dot" style={{fontSize:size}}>.</span><span className={`proof-logo-tag${dark?' dark':''}`}>Beta</span></div>; }
 
-function ProofLogo({size=24,dark=false}) {
-  return (
-    <div className="proof-logo">
-      <span className={`proof-logo-text${dark?' dark':''}`} style={{fontSize:size}}><i>Proof</i></span>
-      <span className="proof-logo-dot" style={{fontSize:size}}>.</span>
-      <span className={`proof-logo-tag${dark?' dark':''}`}>Beta</span>
-    </div>
-  );
-}
-
-// ── Client Review ───────────────────────────────────────────────────────────
-function ClientReview({post, board, onClose}) {
-  const [mode,setMode]         = useState('view');
+function ClientReview({post, board, onClose, onApprove, onRequestEdits}) {
+  const [mode,setMode] = useState('view');
   const [editNote,setEditNote] = useState('');
   const [submitted,setSubmitted] = useState(null);
 
-  const TopBar = () => (
-    <div className="cv-topbar">
-      <ProofLogo size={22} dark/>
-      <div style={{display:'flex',alignItems:'center',gap:12}}>
-        <span className="cv-no-login">No account needed · Secure link</span>
-        <button className="cv-back" onClick={onClose}>← Back to Dashboard</button>
-      </div>
-    </div>
-  );
+  useEffect(() => {
+    const onEsc = (e) => e.key === 'Escape' && setMode('view');
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, []);
 
-  if (submitted === 'approved') return (
-    <div className="cv-wrap">
-      <TopBar/>
-      <div className="cv-success-body">
-        <div className="cv-success-icon">✅</div>
-        <div className="cv-success-title">All approved!</div>
-        <div className="cv-success-sub">Your approval has been submitted. The creator will be notified right away.</div>
-      </div>
-    </div>
-  );
+  const TopBar = () => <div className="cv-topbar"><ProofLogo size={22} dark/><div style={{display:'flex',alignItems:'center',gap:12}}><span className="cv-no-login">No account needed · Secure link</span><button className="cv-back" onClick={onClose} aria-label="Back to dashboard">← Back to Dashboard</button></div></div>;
 
-  if (submitted === 'edits') return (
-    <div className="cv-wrap">
-      <TopBar/>
-      <div className="cv-success-body">
-        <div className="cv-success-icon">✏️</div>
-        <div className="cv-success-title">Edits submitted!</div>
-        <div className="cv-success-sub">Your notes have been sent to the creator. Expect a revised draft soon.</div>
-      </div>
-    </div>
-  );
+  const Success = ({type}) => <div className="cv-wrap"><TopBar/><div className="cv-success-body"><div className="cv-success-icon">{type==='approved'?'✅':'✏️'}</div><div className="cv-success-title">{type==='approved'?'All approved!':'Edits submitted!'}</div><div className="cv-success-sub">{type==='approved'?'Your approval has been submitted. The creator will be notified right away.':'Your notes have been sent to the creator. Expect a revised draft soon.'}</div><button className="btn btn-ghost" style={{marginTop:18}} onClick={onClose}>Back to Dashboard</button></div></div>;
+
+  if (submitted) return <Success type={submitted}/>;
 
   return (
     <div className="cv-wrap">
       <TopBar/>
       <div className="cv-body">
-        <div className="cv-greeting">
-          <h2>You've got a post to review 👋</h2>
-          <p><strong style={{color:'#1C1A18'}}>Your creator</strong> has shared content for your approval. Take a look and let them know if it's good to go — or leave notes for edits.</p>
-        </div>
-
-        <div className="cv-card">
-          <div className="cv-card-header">
-            <span className="cv-card-icon">{PLATFORMS[post.platform]}</span>
-            <div>
-              <div className="cv-card-title">{post.title}</div>
-              <div className="cv-card-sub">For {board.name} · {post.platform}</div>
-            </div>
-          </div>
-          <div className="cv-card-body">
-            {post.image && (
-              <img
-                src={post.image}
-                alt="Post visual"
-                className="cv-post-image"
-                onError={e=>{e.target.style.display='none'}}
-              />
-            )}
-            <div className="cv-copy">{post.content}</div>
-            <div className="cv-tags">{post.hashtags.map(h=><span key={h} className="cv-tag">{h}</span>)}</div>
-          </div>
-        </div>
-
+        <div className="cv-greeting"><h2>You've got a post to review 👋</h2><p><strong style={{color:'#1C1A18'}}>Your creator</strong> has shared content for your approval. Take a look and let them know if it's good to go — or leave notes for edits.</p></div>
+        <div className="cv-card"><div className="cv-card-header"><span className="cv-card-icon">{PLATFORMS[post.platform]}</span><div><div className="cv-card-title">{post.title}</div><div className="cv-card-sub">For {board.name} · {post.platform}</div></div></div><div className="cv-card-body">{post.image && <img src={post.image} alt="Post visual" className="cv-post-image" onError={e=>{e.target.style.display='none'}}/>}<div className="cv-copy">{post.content}</div><div className="cv-tags">{post.hashtags.map(h=><span key={h} className="cv-tag">{h}</span>)}</div></div></div>
         <div className="cv-actions">
-          <button className="cv-btn cv-btn-approve" onClick={()=>setSubmitted('approved')}>✓ Approve This Post</button>
-          <button className="cv-btn cv-btn-edit" onClick={()=>setMode(mode==='edit'?'view':'edit')}>✏️ Request Edits</button>
+          <button className="cv-btn cv-btn-approve" onClick={()=>{onApprove(post.id);setSubmitted('approved');}} aria-label="Approve this post">✓ Approve This Post</button>
+          <button className="cv-btn cv-btn-edit" onClick={()=>setMode(mode==='edit'?'view':'edit')} aria-label="Request edits">✏️ Request Edits</button>
         </div>
-
-        {mode==='edit' && (
-          <div className="cv-edit-panel">
-            <label className="cv-edit-label">Leave your notes for the creator</label>
-            <textarea
-              className="cv-edit-textarea"
-              placeholder="e.g. Can you change the opening line? Also swap the hashtags for something more niche..."
-              value={editNote}
-              onChange={e=>setEditNote(e.target.value)}
-            />
-            <button className="cv-submit-btn" onClick={()=>editNote.trim()&&setSubmitted('edits')}>Submit Notes →</button>
-          </div>
-        )}
-
+        {mode==='edit' && <div className="cv-edit-panel"><label className="cv-edit-label">Leave your notes for the creator</label><textarea className="cv-edit-textarea" aria-label="Edit notes" placeholder="e.g. Can you change the opening line? Also swap the hashtags for something more niche..." value={editNote} onChange={e=>setEditNote(e.target.value)}/><button className="cv-submit-btn" onClick={()=>{if(!editNote.trim()) return;onRequestEdits(post.id, editNote.trim());setSubmitted('edits');}} aria-label="Submit edit notes">Submit Notes →</button></div>}
         <div className="cv-powered">Powered by <b>Proof</b> · Built for creators.</div>
       </div>
     </div>
   );
 }
 
-// ── Post Detail Modal ───────────────────────────────────────────────────────
-function PostModal({post, board, onClose, onClientReview}) {
-  const [thread,setThread] = useState(post.thread);
+function PostModal({post, board, onClose, onClientReview, appendThread, onMarkRevised, showToast}) {
   const [newMsg,setNewMsg] = useState('');
+  const [selectedVersion,setSelectedVersion] = useState(post.versions?.[post.versions.length-1]?.v || 1);
+  const textareaRef = useRef(null);
+
+  useEffect(()=>{ textareaRef.current?.focus(); },[]);
+  useEffect(()=>{ setSelectedVersion(post.versions?.[post.versions.length-1]?.v || 1); },[post.id, post.versions?.length]);
 
   const send = () => {
     if (!newMsg.trim()) return;
-    setThread(t=>[...t,{id:Date.now(),from:'you',text:newMsg,time:'Just now'}]);
+    appendThread(post.id, { id:Date.now(), from:'you', text:newMsg.trim(), time:humanTime() });
     setNewMsg('');
+  };
+
+  const selectedSnapshot = (post.versions || []).find(v=>v.v===Number(selectedVersion));
+
+  const copyLink = async () => {
+    const link = reviewLinkFor(post);
+    try {
+      await navigator.clipboard.writeText(link);
+      showToast('Link copied', 'success');
+    } catch {
+      showToast('Couldn’t copy — copy manually', 'error');
+    }
   };
 
   return (
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal">
         <div className="modal-header">
-          <div>
-            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
-              <span style={{fontSize:18}}>{PLATFORMS[post.platform]}</span>
-              <StatusPill status={post.status}/>
-            </div>
-            <h3>{post.title}</h3>
-            <p>For <strong style={{color:board.color}}>{board.name}</strong> · Due {post.dueDate}</p>
-          </div>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <div><div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}><span style={{fontSize:18}}>{PLATFORMS[post.platform]}</span><StatusPill status={post.status}/></div><h3>{post.title}</h3><p>For <strong style={{color:board.color}}>{board.name}</strong> · Due {post.dueDate}</p></div>
+          <button className="modal-close" onClick={onClose} aria-label="Close modal">✕</button>
         </div>
         <div className="modal-body">
-          <div className="post-content-box">
-            <div className="post-content-label">Post Copy</div>
-            {post.image && (
-              <img
-                src={post.image}
-                alt=""
-                className="post-modal-image"
-                onError={e=>{e.target.style.display='none'}}
-              />
-            )}
-            <div style={{fontSize:14,lineHeight:1.7}}>{post.content}</div>
-            <div className="post-hashtags">{post.hashtags.map(h=><span key={h} className="hashtag">{h}</span>)}</div>
-          </div>
-
-          <div className="link-box-label">Client Review Link</div>
-          <div className="link-box">
-            <span className="link-box-url">proof.app/review/{post.id}-{post.title.toLowerCase().replace(/\s+/g,'-')}</span>
-            <button className="btn btn-ghost btn-sm" onClick={onClientReview}>Preview →</button>
-            <button className="btn btn-amber btn-sm" onClick={()=>{
-              navigator.clipboard?.writeText(`proof.app/review/${post.id}`).catch(()=>{});
-            }}>Copy Link</button>
-          </div>
-
-          <div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:600,marginBottom:12}}>Feedback Thread</div>
-          {thread.length===0 && (
-            <div style={{textAlign:'center',padding:'14px 0',color:'var(--charcoal-soft)',fontSize:13}}>
-              No feedback yet. Share the review link to get started.
-            </div>
-          )}
-          <div className="thread">
-            {thread.map(msg=>(
-              <div key={msg.id} className="thread-msg">
-                <div className="thread-avatar" style={{background:msg.from==='you'?'var(--charcoal)':board.color,color:'#fff'}}>
-                  {msg.from==='you'?'B':(msg.clientName?.[0]||'C')}
-                </div>
-                <div className={`thread-bubble${msg.from==='client'?' client':''}`}>
-                  <div className="thread-meta">{msg.from==='you'?'You':msg.clientName||'Client'} · {msg.time}</div>
-                  <div className="thread-text">{msg.text}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="thread-input">
-            <textarea
-              className="thread-textarea"
-              rows={2}
-              placeholder="Reply to this thread…"
-              value={newMsg}
-              onChange={e=>setNewMsg(e.target.value)}
-              onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&(e.preventDefault(),send())}
-            />
-            <button className="btn btn-primary btn-sm" onClick={send}>Send</button>
-          </div>
+          {post.image && <img src={post.image} alt="" className="modal-image" onError={e=>{e.target.style.display='none'}}/>}
+          <div className="section"><div className="section-title">Post Copy</div><p className="post-copy">{post.content}</p><div className="hashtags">{post.hashtags.map(tag=><span key={tag} className="hash">{tag}</span>)}</div></div>
+          <div className="section"><div className="section-title">Review Link</div><div className="review-link"><span>{reviewLinkFor(post)}</span><button className="btn btn-ghost btn-sm" onClick={copyLink} aria-label="Copy review link">Copy Link</button></div></div>
+          <div className="section"><div className="section-title" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>Version History<select className="form-select" style={{maxWidth:280}} value={selectedVersion} onChange={e=>setSelectedVersion(Number(e.target.value))} aria-label="Select version">{[...(post.versions||[])].slice().reverse().map(v=><option key={v.v} value={v.v}>{`v${v.v} · ${v.time} · ${statusNice(v.status)}`}</option>)}</select></div>{selectedSnapshot && <div className="version-preview"><p>{selectedSnapshot.content}</p><div style={{marginTop:8}}>{(selectedSnapshot.hashtags||[]).map(tag=><span key={`${selectedSnapshot.v}-${tag}`} className="cv-tag">{tag}</span>)}</div>{selectedSnapshot.note && <p style={{marginTop:8,fontSize:12,color:'var(--charcoal-soft)'}}>Note: {selectedSnapshot.note}</p>}</div>}</div>
+          <div className="section"><div className="section-title">Feedback Thread</div><div className="thread-box">{post.thread.length===0&&<p style={{fontSize:13,color:'var(--charcoal-soft)'}}>No comments yet.</p>}{post.thread.map(m=><div key={m.id} className={`msg ${m.from}`}><div className="msg-head">{m.from==='you'?'You':(m.clientName||'Client')} <span>{m.time}</span></div><div className="msg-text">{m.text}</div></div>)}</div><div className="thread-input"><textarea ref={textareaRef} className="thread-textarea" placeholder="Reply to feedback…" aria-label="Reply to feedback" value={newMsg} onChange={e=>setNewMsg(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}}/><button className="btn btn-primary" onClick={send}>Send</button></div></div>
         </div>
         <div className="modal-footer">
-          {post.status==='needs-edits'  && <button className="btn btn-amber">Mark as Revised →</button>}
-          {post.status==='in-review'    && <button className="btn btn-ghost">Resend Link</button>}
-          {post.status==='approved'     && <button className="btn btn-primary">Schedule Post ↗</button>}
-          {post.status==='draft'        && <button className="btn btn-amber">Send for Review →</button>}
-          {post.status==='pending'      && <button className="btn btn-ghost btn-sm" onClick={onClientReview}>Preview Client View →</button>}
+          {post.status==='needs-edits' && <button className="btn btn-amber" onClick={()=>onMarkRevised(post.id)}>Mark as Revised →</button>}
+          <button className="btn btn-ghost" onClick={onClientReview}>Open Client Review</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ── New Post Modal ──────────────────────────────────────────────────────────
 function NewPostModal({boards, onClose, onAdd}) {
-  const [form,setForm] = useState({title:'',boardId:boards[0].id,platform:'instagram',content:'',hashtags:'',dueDate:''});
-  const set = (k,v) => setForm(f=>({...f,[k]:v}));
-
+  const [form,setForm] = useState({ title:'', boardId:boards[0]?.id || 'self', platform:'instagram', content:'', hashtags:'', dueDate:'' });
+  const set = (k,v)=>setForm(prev=>({...prev,[k]:v}));
   const handleCreate = () => {
     if (!form.title.trim() || !form.content.trim()) return;
     onAdd({
       id: Date.now(),
+      title: form.title.trim(),
       boardId: form.boardId,
-      title: form.title,
       platform: form.platform,
-      content: form.content,
+      content: form.content.trim(),
+      hashtags: form.hashtags.split(' ').map(h=>h.trim()).filter(Boolean).map(h=>h.startsWith('#')?h:`#${h}`),
+      dueDate: form.dueDate || humanTime(new Date()).split(',')[0],
       image: null,
-      hashtags: form.hashtags.split(' ').filter(Boolean),
       status: 'draft',
-      dueDate: form.dueDate || 'TBD',
-      thread: []
+      thread: [],
+      lastUpdated: humanTime(),
+      versions: [{ v:1, content: form.content.trim(), hashtags: form.hashtags.split(' ').map(h=>h.trim()).filter(Boolean).map(h=>h.startsWith('#')?h:`#${h}`), time:humanTime(), status:'draft' }],
     });
-    onClose();
   };
-
-  return (
-    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="modal">
-        <div className="modal-header">
-          <div><h3>New Post</h3><p>Add a post to a client board for review</p></div>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
-        <div className="modal-body">
-          <div className="form-group">
-            <label className="form-label">Post Title</label>
-            <input className="form-input" placeholder="e.g. Summer Campaign Kickoff" value={form.title} onChange={e=>set('title',e.target.value)}/>
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Client Board</label>
-              <select className="form-select" value={form.boardId} onChange={e=>set('boardId',e.target.value)}>
-                {boards.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Platform</label>
-              <select className="form-select" value={form.platform} onChange={e=>set('platform',e.target.value)}>
-                {Object.entries(PLATFORMS).map(([p,icon])=><option key={p} value={p}>{icon} {p[0].toUpperCase()+p.slice(1)}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Post Copy</label>
-            <textarea className="form-textarea" rows={4} placeholder="Write your post content here…" value={form.content} onChange={e=>set('content',e.target.value)}/>
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Hashtags (space-separated)</label>
-              <input className="form-input" placeholder="#hashtag1 #hashtag2" value={form.hashtags} onChange={e=>set('hashtags',e.target.value)}/>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Due Date</label>
-              <input className="form-input" type="date" value={form.dueDate} onChange={e=>set('dueDate',e.target.value)}/>
-            </div>
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-amber" onClick={handleCreate}>Create Post →</button>
-        </div>
-      </div>
-    </div>
-  );
+  return <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}><div className="modal"><div className="modal-header"><div><h3>Create New Post</h3><p>Draft content and send for client approval</p></div><button className="modal-close" onClick={onClose} aria-label="Close modal">✕</button></div><div className="modal-body"><div className="form-row"><div className="form-group"><label className="form-label">Post Title</label><input className="form-input" value={form.title} onChange={e=>set('title',e.target.value)} aria-label="Post title"/></div><div className="form-group"><label className="form-label">Board</label><select className="form-select" value={form.boardId} onChange={e=>set('boardId',e.target.value)} aria-label="Board">{boards.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></div><div className="form-group"><label className="form-label">Platform</label><select className="form-select" value={form.platform} onChange={e=>set('platform',e.target.value)} aria-label="Platform">{Object.entries(PLATFORMS).map(([p,icon])=><option key={p} value={p}>{icon} {p[0].toUpperCase()+p.slice(1)}</option>)}</select></div></div><div className="form-group"><label className="form-label">Post Copy</label><textarea className="form-textarea" rows={4} value={form.content} onChange={e=>set('content',e.target.value)} aria-label="Post copy"/></div><div className="form-row"><div className="form-group"><label className="form-label">Hashtags (space-separated)</label><input className="form-input" value={form.hashtags} onChange={e=>set('hashtags',e.target.value)} aria-label="Hashtags"/></div><div className="form-group"><label className="form-label">Due Date</label><input className="form-input" type="date" value={form.dueDate} onChange={e=>set('dueDate',e.target.value)} aria-label="Due date"/></div></div></div><div className="modal-footer"><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-amber" onClick={handleCreate}>Create Post →</button></div></div></div>;
 }
 
-// ── New Board Modal ─────────────────────────────────────────────────────────
 function NewBoardModal({onClose, onAdd}) {
-  const [name,setName]   = useState('');
+  const [name,setName] = useState('');
   const [color,setColor] = useState('#2563EB');
-
   const COLORS = ['#E8A020','#6C5CE7','#2D7A4F','#E84393','#2563EB','#E74C3C','#1ABC9C','#E67E22'];
   const initials = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) || '??';
-
-  return (
-    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="nb-modal">
-        <div className="modal-header">
-          <div><h3>New Board</h3><p>Create a board for a new client or project</p></div>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
-        <div className="modal-body">
-          <div className="form-group">
-            <label className="form-label">Board Name</label>
-            <input className="form-input" placeholder="e.g. Bloom Bakery, Personal Brand" value={name} onChange={e=>setName(e.target.value)} autoFocus/>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Color</label>
-            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-              {COLORS.map(c=>(
-                <div key={c} onClick={()=>setColor(c)} style={{
-                  width:28,height:28,borderRadius:8,background:c,cursor:'pointer',
-                  border:color===c?`3px solid ${c}`:'3px solid transparent',
-                  outline:color===c?'2px solid var(--charcoal)':'none',
-                  transition:'all .15s'
-                }}/>
-              ))}
-            </div>
-          </div>
-          <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:'var(--cream-dark)',borderRadius:10,marginTop:4}}>
-            <div style={{width:36,height:36,borderRadius:9,background:color+'26',color,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:13}}>{initials}</div>
-            <span style={{fontSize:14,fontWeight:500,color:name?'var(--charcoal)':'var(--charcoal-soft)'}}>{name||'Board name preview'}</span>
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-amber" onClick={()=>{
-            if (!name.trim()) return;
-            onAdd({ id: 'board-'+Date.now(), name: name.trim(), color, initials });
-            onClose();
-          }}>Create Board →</button>
-        </div>
-      </div>
-    </div>
-  );
+  return <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}><div className="nb-modal"><div className="modal-header"><div><h3>New Board</h3><p>Create a board for a new client or project</p></div><button className="modal-close" onClick={onClose}>✕</button></div><div className="modal-body"><div className="form-group"><label className="form-label">Board Name</label><input className="form-input" placeholder="e.g. Bloom Bakery, Personal Brand" value={name} onChange={e=>setName(e.target.value)} autoFocus/></div><div className="form-group"><label className="form-label">Color</label><div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{COLORS.map(c=><div key={c} onClick={()=>setColor(c)} style={{width:28,height:28,borderRadius:8,background:c,cursor:'pointer',border:color===c?`3px solid ${c}`:'3px solid transparent',outline:color===c?'2px solid var(--charcoal)':'none',transition:'all .15s'}}/>)}</div></div><div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:'var(--cream-dark)',borderRadius:10,marginTop:4}}><div style={{width:36,height:36,borderRadius:9,background:color+'26',color,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:13}}>{initials}</div><span style={{fontSize:14,fontWeight:500,color:name?'var(--charcoal)':'var(--charcoal-soft)'}}>{name||'Board name preview'}</span></div></div><div className="modal-footer"><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-amber" onClick={()=>{if(!name.trim()) return;onAdd({ id:'board-'+Date.now(), name:name.trim(), color, initials });onClose();}}>Create Board →</button></div></div></div>;
 }
 
-// ── Main App ────────────────────────────────────────────────────────────────
 function App() {
-  const [boards,           setBoards]           = useState(INITIAL_BOARDS);
-  const [activeBoard,      setActiveBoard]       = useState('all');
-  const [posts,            setPosts]             = useState(SAMPLE_POSTS);
-  const [selectedPost,     setSelectedPost]      = useState(null);
-  const [clientReviewPost, setClientReviewPost]  = useState(null);
-  const [showNewPost,      setShowNewPost]        = useState(false);
-  const [showNewBoard,     setShowNewBoard]       = useState(false);
+  const [boards,setBoards] = useState(INITIAL_BOARDS);
+  const [activeBoard,setActiveBoard] = useState('all');
+  const [posts,setPosts] = useState(() => normalizePosts(SAMPLE_POSTS));
+  const [selectedPostId,setSelectedPostId] = useState(null);
+  const [clientReviewPostId,setClientReviewPostId] = useState(null);
+  const [showNewPost,setShowNewPost] = useState(false);
+  const [showNewBoard,setShowNewBoard] = useState(false);
+  const [searchTerm,setSearchTerm] = useState('');
+  const [statusFilter,setStatusFilter] = useState('all');
+  const [platformFilter,setPlatformFilter] = useState('all');
+  const [toast,setToast] = useState({ visible:false, message:'', type:'success' });
+
+  const anyModalOpen = Boolean(selectedPostId || showNewPost || showNewBoard);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) setPosts(normalizePosts(JSON.parse(raw)));
+      else setPosts(normalizePosts(SAMPLE_POSTS));
+    } catch { setPosts(normalizePosts(SAMPLE_POSTS)); }
+  }, []);
+
+  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(posts)); } catch {} }, [posts]);
+  useEffect(() => { document.body.style.overflow = anyModalOpen ? 'hidden' : ''; return ()=>{document.body.style.overflow='';}; }, [anyModalOpen]);
+  useEffect(() => {
+    const onEsc = (e) => {
+      if (e.key !== 'Escape') return;
+      if (selectedPostId) setSelectedPostId(null);
+      if (showNewPost) setShowNewPost(false);
+      if (showNewBoard) setShowNewBoard(false);
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [selectedPostId, showNewPost, showNewBoard]);
+
+  const showToast = (message, type='success') => {
+    setToast({ visible:true, message, type });
+    setTimeout(()=>setToast(prev=>({...prev, visible:false})), 2000);
+  };
 
   const boardFor = id => boards.find(b=>b.id===id) || boards[0];
-  const filtered = activeBoard==='all' ? posts : posts.filter(p=>p.boardId===activeBoard);
-  const pending  = posts.filter(p=>p.status==='needs-edits'||p.status==='pending').length;
+  const updatePost = (postId, updaterFn) => setPosts(prev => prev.map(post => post.id===postId ? updaterFn(post) : post));
+  const appendThread = (postId, msg) => updatePost(postId, post => ({ ...post, thread:[...post.thread, msg], lastUpdated: humanTime() }));
+  const pushVersion = (postId, partial) => updatePost(postId, post => {
+    const versions = post.versions || [];
+    const last = versions[versions.length-1];
+    const next = { v:(last?.v || 0)+1, content:partial.content ?? post.content, hashtags:partial.hashtags ?? post.hashtags, time:humanTime(), note:partial.note, status:partial.status ?? post.status };
+    return { ...post, versions:[...versions, next], lastUpdated: next.time };
+  });
+
+  const onApprove = (postId) => {
+    updatePost(postId, post => {
+      const at = humanTime();
+      const versions = post.versions || [];
+      const nextVersion = { v:(versions[versions.length-1]?.v || 0)+1, content:post.content, hashtags:post.hashtags, time:at, status:'approved', note:'Approved ✅' };
+      return { ...post, status:'approved', lastUpdated:at, thread:[...post.thread, { id:Date.now(), from:'client', clientName:'Client', text:'Approved ✅', time:at }], versions:[...versions,nextVersion] };
+    });
+  };
+
+  const onRequestEdits = (postId, note) => {
+    updatePost(postId, post => {
+      const at = humanTime();
+      const versions = post.versions || [];
+      const nextVersion = { v:(versions[versions.length-1]?.v || 0)+1, content:post.content, hashtags:post.hashtags, time:at, status:'needs-edits', note };
+      return { ...post, status:'needs-edits', lastUpdated:at, thread:[...post.thread, { id:Date.now(), from:'client', clientName:'Client', text:note, time:at }], versions:[...versions,nextVersion] };
+    });
+  };
+
+  const onMarkRevised = (postId) => {
+    updatePost(postId, post => {
+      const at = humanTime();
+      const versions = post.versions || [];
+      const nextVersion = { v:(versions[versions.length-1]?.v || 0)+1, content:post.content, hashtags:post.hashtags, time:at, status:'pending', note:'Revised and resent for review.' };
+      return { ...post, status:'pending', lastUpdated:at, thread:[...post.thread, { id:Date.now(), from:'you', text:'Revised and resent for review.', time:at }], versions:[...versions,nextVersion] };
+    });
+  };
+
+  const selectedPost = posts.find(p=>p.id===selectedPostId) || null;
+  const clientReviewPost = posts.find(p=>p.id===clientReviewPostId) || null;
+
+  const filteredPosts = useMemo(() => posts
+    .filter(p => activeBoard==='all' || p.boardId===activeBoard)
+    .filter(p => statusFilter==='all' || p.status===statusFilter)
+    .filter(p => platformFilter==='all' || p.platform===platformFilter)
+    .filter(p => {
+      if (!searchTerm.trim()) return true;
+      const t = searchTerm.toLowerCase();
+      return p.title.toLowerCase().includes(t) || p.content.toLowerCase().includes(t);
+    }), [posts, activeBoard, statusFilter, platformFilter, searchTerm]);
+
+  const sorted = [...filteredPosts].sort((a,b)=>(STATUS_ORDER[a.status]??9)-(STATUS_ORDER[b.status]??9));
+  const pending = posts.filter(p=>p.status==='needs-edits'||p.status==='pending').length;
   const approved = posts.filter(p=>p.status==='approved').length;
   const inReview = posts.filter(p=>p.status==='in-review').length;
-  const sorted   = [...filtered].sort((a,b)=>(STATUS_ORDER[a.status]??9)-(STATUS_ORDER[b.status]??9));
 
-  if (clientReviewPost) {
-    return <ClientReview post={clientReviewPost} board={boardFor(clientReviewPost.boardId)} onClose={()=>setClientReviewPost(null)}/>;
-  }
+  if (clientReviewPost) return <ClientReview post={clientReviewPost} board={boardFor(clientReviewPost.boardId)} onClose={()=>setClientReviewPostId(null)} onApprove={onApprove} onRequestEdits={onRequestEdits}/>;
 
   return (
     <div className="app">
-      {/* ── SIDEBAR ── */}
       <div className="sidebar">
-        <div className="sidebar-logo-wrap">
-          <ProofLogo size={26}/>
-          <div className="sidebar-tagline">Content Approval Hub</div>
-        </div>
-
-        <div className="sidebar-section">
-          <div className="sidebar-section-label">Boards</div>
-          <div className={`board-item${activeBoard==='all'?' active':''}`} onClick={()=>setActiveBoard('all')}>
-            <div className="board-avatar" style={{background:'rgba(255,255,255,.07)',color:'rgba(255,255,255,.4)',fontSize:15}}>⊞</div>
-            All Boards
-            {pending>0 && <span className="badge">{pending}</span>}
-          </div>
-          {boards.map(board=>{
-            const bp = posts.filter(p=>p.boardId===board.id&&(p.status==='needs-edits'||p.status==='pending')).length;
-            return (
-              <div key={board.id} className={`board-item${activeBoard===board.id?' active':''}`} onClick={()=>setActiveBoard(board.id)}>
-                <BoardAvatar board={board}/>
-                {board.name}
-                {bp>0 && <span className="badge">{bp}</span>}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* ← FIXED: now opens New Board modal, not New Post */}
-        <button className="sidebar-new-btn" onClick={()=>setShowNewBoard(true)}>
-          + New Board
-        </button>
-
-        <div className="sidebar-bottom">
-          <div className="user-pill">
-            <div className="user-avatar">B</div>
-            <div>
-              <div className="u-name">Ben</div>
-              <div className="u-role">{boards.length} active clients</div>
-            </div>
-          </div>
-        </div>
+        <div className="sidebar-logo-wrap"><ProofLogo size={26}/><div className="sidebar-tagline">Content Approval Hub</div></div>
+        <div className="sidebar-section"><div className="sidebar-section-label">Boards</div><div className={`board-item${activeBoard==='all'?' active':''}`} onClick={()=>setActiveBoard('all')}><div className="board-avatar" style={{background:'rgba(255,255,255,.07)',color:'rgba(255,255,255,.4)',fontSize:15}}>⊞</div>All Boards{pending>0 && <span className="badge">{pending}</span>}</div>{boards.map(board=>{const bp=posts.filter(p=>p.boardId===board.id&&(p.status==='needs-edits'||p.status==='pending')).length;return <div key={board.id} className={`board-item${activeBoard===board.id?' active':''}`} onClick={()=>setActiveBoard(board.id)}><BoardAvatar board={board}/>{board.name}{bp>0 && <span className="badge">{bp}</span>}</div>;})}</div>
+        <button className="sidebar-new-btn" onClick={()=>setShowNewBoard(true)}>+ New Board</button>
+        <div className="sidebar-bottom"><div className="user-pill"><div className="user-avatar">B</div><div><div className="u-name">Ben</div><div className="u-role">{boards.length} active clients</div></div></div></div>
       </div>
 
-      {/* ── MAIN ── */}
       <div className="main">
         <div className="topbar">
-          <div className="topbar-left">
-            <h2>{activeBoard==='all'?'All Boards':boardFor(activeBoard).name}</h2>
-            <p>{sorted.length} post{sorted.length!==1?'s':''} · {pending} need attention</p>
-          </div>
+          <div className="topbar-left"><h2>{activeBoard==='all'?'All Boards':boardFor(activeBoard).name}</h2><p>{sorted.length} post{sorted.length!==1?'s':''} · {pending} need attention</p><div className="topbar-note">Demo data saved locally</div></div>
           <div className="topbar-right">
-            <button className="btn btn-ghost btn-sm" onClick={()=>setClientReviewPost(posts[0])}>
-              Preview Client View →
-            </button>
+            <input className="form-input" placeholder="Search title or copy" value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} aria-label="Search posts"/>
+            <select className="form-select" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} aria-label="Filter by status"><option value="all">All Statuses</option><option value="needs-edits">Needs Edits</option><option value="pending">Pending</option><option value="in-review">In Review</option><option value="draft">Draft</option><option value="approved">Approved</option></select>
+            <select className="form-select" value={platformFilter} onChange={e=>setPlatformFilter(e.target.value)} aria-label="Filter by platform"><option value="all">All Platforms</option>{Object.keys(PLATFORMS).map(p=><option key={p} value={p}>{p[0].toUpperCase()+p.slice(1)}</option>)}</select>
+            <button className="btn btn-ghost btn-sm" onClick={()=>{localStorage.removeItem(STORAGE_KEY);setPosts(normalizePosts(SAMPLE_POSTS));}}>Reset Demo Data</button>
+            <button className="btn btn-ghost btn-sm" onClick={()=>setClientReviewPostId(posts[0]?.id)}>Preview Client View →</button>
             <button className="btn btn-amber" onClick={()=>setShowNewPost(true)}>+ New Post</button>
           </div>
         </div>
 
-        <div className="stats-bar">
-          <div className="stat-box amber"><div className="stat-num">{pending}</div><div className="stat-label">Need Attention</div></div>
-          <div className="stat-box"><div className="stat-num">{inReview}</div><div className="stat-label">In Review</div></div>
-          <div className="stat-box green"><div className="stat-num">{approved}</div><div className="stat-label">Approved</div></div>
-          <div className="stat-box"><div className="stat-num">{posts.length}</div><div className="stat-label">Total Posts</div></div>
-        </div>
-
-        <div className="content">
-          <div className="posts-grid">
-            {sorted.length===0 && (
-              <div className="empty-state">
-                <div className="empty-icon">📋</div>
-                <h3>No posts yet</h3>
-                <p>Hit "+ New Post" to get started.</p>
-              </div>
-            )}
-            {sorted.map(post=>{
-              const board = boardFor(post.boardId);
-              return (
-                <div key={post.id} className="post-card" onClick={()=>setSelectedPost(post)}>
-                  <div className={`post-card-accent ${post.status}`}/>
-                  <div className="post-card-body">
-                    {post.image
-                      ? <img src={post.image} alt="" className="post-thumb" onError={e=>{e.target.style.display='none'}}/>
-                      : <div className="post-thumb-icon">{PLATFORMS[post.platform]}</div>
-                    }
-                    <div className="post-info">
-                      <div className="post-title">{post.title}</div>
-                      <div className="post-meta">
-                        <span style={{color:board.color,fontWeight:600}}>{board.name}</span>
-                        {' · '}Due {post.dueDate}
-                        {post.thread.length>0 && ` · ${post.thread.length} msg${post.thread.length>1?'s':''}`}
-                      </div>
-                      <div className="post-preview">{post.content}</div>
-                    </div>
-                    <div className="post-card-actions" onClick={e=>e.stopPropagation()}>
-                      <StatusPill status={post.status}/>
-                      {post.status==='needs-edits' && <span className="notif-dot"/>}
-                      <button className="btn btn-ghost btn-sm" onClick={e=>{e.stopPropagation();setSelectedPost(post);}}>Open</button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <div className="stats-bar"><div className="stat-box amber"><div className="stat-num">{pending}</div><div className="stat-label">Need Attention</div></div><div className="stat-box"><div className="stat-num">{inReview}</div><div className="stat-label">In Review</div></div><div className="stat-box green"><div className="stat-num">{approved}</div><div className="stat-label">Approved</div></div><div className="stat-box"><div className="stat-num">{posts.length}</div><div className="stat-label">Total Posts</div></div></div>
+        <div className="content"><div className="posts-grid">{sorted.length===0 && <div className="empty-state"><div className="empty-icon">📋</div><h3>No posts yet</h3><p>Adjust filters or hit "+ New Post" to add one.</p></div>}{sorted.map(post=>{const board=boardFor(post.boardId);return <div key={post.id} className="post-card" onClick={()=>setSelectedPostId(post.id)}><div className={`post-card-accent ${post.status}`}/><div className="post-card-body">{post.image?<img src={post.image} alt="" className="post-thumb" onError={e=>{e.target.style.display='none'}}/>:<div className="post-thumb-icon">{PLATFORMS[post.platform]}</div>}<div className="post-info"><div className="post-title">{post.title}</div><div className="post-meta"><span style={{color:board.color,fontWeight:600}}>{board.name}</span> · Due {post.dueDate}{post.thread.length>0 && ` · ${post.thread.length} msg${post.thread.length>1?'s':''}`}</div><div className="post-preview">{post.content}</div></div><div className="post-card-actions" onClick={e=>e.stopPropagation()}><StatusPill status={post.status}/>{post.status==='needs-edits' && <span className="notif-dot"/>}<button className="btn btn-ghost btn-sm" onClick={()=>setSelectedPostId(post.id)}>Open</button></div></div></div>;})}</div></div>
       </div>
 
-      {/* ── MODALS ── */}
-      {selectedPost && (
-        <PostModal
-          post={selectedPost}
-          board={boardFor(selectedPost.boardId)}
-          onClose={()=>setSelectedPost(null)}
-          onClientReview={()=>{setSelectedPost(null);setClientReviewPost(selectedPost);}}
-        />
-      )}
-      {showNewPost && (
-        <NewPostModal
-          boards={boards}
-          onClose={()=>setShowNewPost(false)}
-          onAdd={p=>{setPosts(prev=>[p,...prev]);setShowNewPost(false);}}
-        />
-      )}
-      {showNewBoard && (
-        <NewBoardModal
-          onClose={()=>setShowNewBoard(false)}
-          onAdd={b=>{setBoards(prev=>[...prev,b]);setShowNewBoard(false);}}
-        />
-      )}
+      {selectedPost && <PostModal post={selectedPost} board={boardFor(selectedPost.boardId)} onClose={()=>setSelectedPostId(null)} onClientReview={()=>{setSelectedPostId(null);setClientReviewPostId(selectedPost.id);}} appendThread={appendThread} onMarkRevised={onMarkRevised} showToast={showToast}/>}      
+      {showNewPost && <NewPostModal boards={boards} onClose={()=>setShowNewPost(false)} onAdd={p=>{setPosts(prev=>normalizePosts([p,...prev]));setShowNewPost(false);}}/>}
+      {showNewBoard && <NewBoardModal onClose={()=>setShowNewBoard(false)} onAdd={b=>{setBoards(prev=>[...prev,b]);setShowNewBoard(false);}}/>}
+      {toast.visible && <div className="toast-wrap"><div className={`toast ${toast.type==='error'?'err':''}`}>{toast.message}</div></div>}
     </div>
   );
 }
